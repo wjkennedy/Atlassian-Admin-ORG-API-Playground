@@ -1,13 +1,16 @@
 import streamlit as st
 import requests
 import json
+import pandas as pd
 
-st.title("Atlassian Org Admin API Playground (Full Dynamic Spec)")
+# --- App Title and Instructions ---
+st.title("🚀 Atlassian Admin API Playground (Full Dynamic Spec + CSV Export)")
 
 st.info("""
 🔑 **Instructions**  
 1️⃣ Enter your **API Key** and **Organization ID**.  
 2️⃣ Browse all endpoints in the sidebar, edit the URL as needed, and test live!  
+3️⃣ View results as JSON or table, and download as CSV!  
 """)
 
 st.sidebar.header("🔧 API Setup")
@@ -21,6 +24,10 @@ def load_openapi_spec():
     return resp.json() if resp.status_code == 200 else {}
 
 spec = load_openapi_spec()
+
+# --- Get base URL from servers ---
+servers = spec.get("servers", [])
+base_url = servers[0]["url"] if servers else "https://api.atlassian.com"
 
 paths = spec.get("paths", {})
 tags = {}
@@ -70,13 +77,12 @@ if "requestBody" in selected["details"]:
         st.warning("⚠️ Invalid JSON. Using empty object.")
         request_body = {}
 
-# --- Corrected base URL to include /admin/v2 ---
-base_url = "https://api.atlassian.com/admin/v2"
+# --- Build final URL from spec ---
 default_url = base_url + selected["path"]
 if "{orgId}" in default_url and org_id:
     default_url = default_url.replace("{orgId}", org_id)
 
-st.subheader("🔗 Dynamic URL Editor")
+st.subheader("🔗 Dynamic URL Editor (Honoring Spec Base URL)")
 editable_url = st.text_input("Edit the final request URL", value=default_url)
 
 def send_request(method, url, api_key, body=None, params=None):
@@ -94,13 +100,43 @@ if st.button("🚀 Send Request"):
     method = selected["method"]
     for param, value in path_params.items():
         editable_url = editable_url.replace(f"{{{param}}}", value)
+    
+    st.write(f"🔗 **Final URL:** {editable_url}")
+    
     resp = send_request(method, editable_url, api_key, body=request_body, params=query_params)
+    
     st.write(f"Status Code: {resp.status_code}")
+    
     try:
-        st.json(resp.json())
-    except:
+        json_data = resp.json()
+        st.subheader("📦 JSON Response")
+        st.json(json_data)
+        
+        # Try to convert to tabular data
+        df = None
+        if isinstance(json_data, list):
+            df = pd.DataFrame(json_data)
+        elif isinstance(json_data, dict) and "data" in json_data and isinstance(json_data["data"], list):
+            df = pd.DataFrame(json_data["data"])
+        
+        if df is not None and not df.empty:
+            st.subheader("📊 Tabular View")
+            st.dataframe(df)
+
+            # Download CSV
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Download data as CSV",
+                data=csv,
+                file_name='api_data.csv',
+                mime='text/csv',
+            )
+        else:
+            st.info("ℹ️ No tabular data to display.")
+    except Exception as e:
         st.text(resp.text)
+        st.error(f"Error parsing JSON: {e}")
 
 st.markdown("---")
-st.caption("✅ Finalized with admin/v2 prefix handling and safe parameter replacements.")
+st.caption("✅ This playground uses the live /admin/v2 API – dynamic exploration, tabular data view, and CSV export ready!")
 
