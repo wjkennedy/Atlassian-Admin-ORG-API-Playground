@@ -3,6 +3,9 @@ import requests
 import json
 import pandas as pd
 
+# --- Logo ---
+st.image("https://a9group.net/a9logo.png", width=96)
+
 # --- App Title and Instructions ---
 st.title("🚀 Atlassian Admin API Playground (Full Dynamic Spec + CSV Export)")
 
@@ -25,7 +28,7 @@ def load_openapi_spec():
 
 spec = load_openapi_spec()
 
-# --- Get base URL from servers ---
+# --- Use servers[0].url from the spec to get the base URL
 servers = spec.get("servers", [])
 base_url = servers[0]["url"] if servers else "https://api.atlassian.com"
 
@@ -77,7 +80,7 @@ if "requestBody" in selected["details"]:
         st.warning("⚠️ Invalid JSON. Using empty object.")
         request_body = {}
 
-# --- Build final URL from spec ---
+# --- Build final URL based on spec's server URL
 default_url = base_url + selected["path"]
 if "{orgId}" in default_url and org_id:
     default_url = default_url.replace("{orgId}", org_id)
@@ -104,7 +107,6 @@ if st.button("🚀 Send Request"):
     st.write(f"🔗 **Final URL:** {editable_url}")
     
     resp = send_request(method, editable_url, api_key, body=request_body, params=query_params)
-    
     st.write(f"Status Code: {resp.status_code}")
     
     try:
