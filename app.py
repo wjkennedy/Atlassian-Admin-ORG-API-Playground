@@ -14,6 +14,7 @@ st.info("""
 1️⃣ Enter your **API Key** and **Organization ID**.  
 2️⃣ Browse all endpoints in the sidebar, edit the URL as needed, and test live!  
 3️⃣ View results as JSON or table, and download as CSV!  
+4️⃣ The app remembers your responses for dynamic dropdowns (like `directoryId`, `userId`, etc.).  
 """)
 
 st.sidebar.header("🔧 API Setup")
@@ -54,6 +55,7 @@ selected = next(ep for ep in endpoints if f"{ep['method']} {ep['path']}" == sele
 st.subheader(f"🔗 {selected_endpoint}")
 st.write(selected["details"].get("summary", "No summary available."))
 
+# --- Path & query parameters ---
 path_params = {}
 query_params = {}
 
@@ -62,14 +64,20 @@ if "parameters" in selected["details"]:
         pname = param.get("name", "unnamed_param")
         pdesc = param.get("description", "")
         ptype = param.get("in", "")
+        # Use known dict if available
+        known_dict = st.session_state.get(f"{pname}_dict", {})
         if ptype == "path":
-            value = st.text_input(f"🔧 Path param: {pname} ({pdesc})", "")
+            if known_dict:
+                value = st.selectbox(f"🔧 Path param: {pname} ({pdesc})", list(known_dict.keys()), format_func=lambda k: known_dict[k])
+            else:
+                value = st.text_input(f"🔧 Path param: {pname} ({pdesc})", "")
             path_params[pname] = value
         elif ptype == "query":
             value = st.text_input(f"🔎 Query param: {pname} ({pdesc})", "")
             if value:
                 query_params[pname] = value
 
+# --- Request body if applicable ---
 request_body = None
 if "requestBody" in selected["details"]:
     st.subheader("📝 Request Body (JSON)")
@@ -80,7 +88,7 @@ if "requestBody" in selected["details"]:
         st.warning("⚠️ Invalid JSON. Using empty object.")
         request_body = {}
 
-# --- Build final URL based on spec's server URL
+# --- Build default URL ---
 default_url = base_url + selected["path"]
 if "{orgId}" in default_url and org_id:
     default_url = default_url.replace("{orgId}", org_id)
@@ -88,6 +96,7 @@ if "{orgId}" in default_url and org_id:
 st.subheader("🔗 Dynamic URL Editor (Honoring Spec Base URL)")
 editable_url = st.text_input("Edit the final request URL", value=default_url)
 
+# --- Send request helper ---
 def send_request(method, url, api_key, body=None, params=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -114,7 +123,15 @@ if st.button("🚀 Send Request"):
         st.subheader("📦 JSON Response")
         st.json(json_data)
         
-        # Try to convert to tabular data
+        # --- Build known dictionaries for path parameters ---
+        known_keys = ["directoryId", "userId", "groupId", "accountId"]
+        if isinstance(json_data, dict) and "data" in json_data and isinstance(json_data["data"], list):
+            for key in known_keys:
+                mapping = {str(item[key]): item.get("name", item.get("displayName", item[key])) for item in json_data["data"] if key in item}
+                if mapping:
+                    st.session_state[f"{key}_dict"] = mapping
+
+        # --- Try to build tabular data ---
         df = None
         if isinstance(json_data, list):
             df = pd.DataFrame(json_data)
@@ -125,7 +142,7 @@ if st.button("🚀 Send Request"):
             st.subheader("📊 Tabular View")
             st.dataframe(df)
 
-            # Download CSV
+            # --- Download CSV ---
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="⬇️ Download data as CSV",
@@ -140,5 +157,5 @@ if st.button("🚀 Send Request"):
         st.error(f"Error parsing JSON: {e}")
 
 st.markdown("---")
-st.caption("✅ This playground uses the live /admin/v2 API – dynamic exploration, tabular data view, and CSV export ready!")
+st.caption("✅ Final release: fully dynamic, builds dictionaries for known path params, and CSV export ready!")
 
