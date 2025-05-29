@@ -1,7 +1,8 @@
-# 🚀 A9 Hierarchy Crawler & Sankey View
+# A9 Hierarchy Crawler & Sankey View
 
 This tool helps Jira admins, compliance teams, and stakeholders **visualize, report, and audit** access within your Atlassian organization.
 
+<img src="./localhost_8502_.png" alt="screenshot" style="height:800px;"/>
 ---
 
 ## ✏️ **What It Does**
