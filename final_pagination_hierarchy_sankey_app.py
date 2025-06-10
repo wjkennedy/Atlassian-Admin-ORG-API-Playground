@@ -32,25 +32,41 @@ else:
 delay = st.number_input("⏳ Delay between requests (seconds)", min_value=0.5, max_value=5.0, value=1.0, step=0.5)
 debug = st.checkbox("🐞 Show Debug Output", value=True)
 
+
 def paginate(url, headers, debug):
     results = []
     while url:
-        resp = requests.get(url, headers=headers).json()
-        data = resp.get("data", [])
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            if debug:
+                st.error(f"Request failed: {resp.status_code} {resp.text}")
+            break
+        resp_json = resp.json()
+        data = resp_json.get("data", [])
         results.extend(data)
         if debug:
-            st.write(f"➡️ Pagination URL: {url}")
-            st.json(resp)
-        next_link = resp.get("links", {}).get("next")
+            st.write(f"➡️ Pagination URL: {resp.url}")
+            st.json(resp_json)
+        next_link = resp_json.get("links", {}).get("next")
         if next_link:
-            url = f"{url.split('?')[0]}?cursor={next_link}"
+            if next_link.startswith("http"):
+                url = next_link
+            else:
+                base = url.split("?")[0]
+                if next_link.startswith("?"):
+                    url = base + next_link
+                else:
+                    url = f"{base}?cursor={next_link}"
             time.sleep(delay)
         else:
             url = None
     return results
 
 if st.button("🚀 Start Crawl"):
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json"
+    }
     base_url = "https://api.atlassian.com/admin/v2/orgs"
 
     hierarchy_data = []

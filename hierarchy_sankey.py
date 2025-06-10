@@ -54,7 +54,10 @@ delay = st.number_input("⏳ Delay between requests (seconds)", min_value=0.5, m
 debug = st.checkbox("🐞 Show Debug Output", value=False)
 
 if st.button("🚀 Start Crawl"):
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json"
+    }
     base_url = "https://api.atlassian.com/admin/v2/orgs"
 
     hierarchy_data = []
