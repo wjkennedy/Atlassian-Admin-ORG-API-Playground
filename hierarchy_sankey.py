@@ -54,7 +54,10 @@ delay = st.number_input("⏳ Delay between requests (seconds)", min_value=0.5, m
 debug = st.checkbox("🐞 Show Debug Output", value=False)
 
 if st.button("🚀 Start Crawl"):
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json"
+    }
     base_url = "https://api.atlassian.com/admin/v2/orgs"
 
     hierarchy_data = []
@@ -87,6 +90,7 @@ if st.button("🚀 Start Crawl"):
             usr_url = f"{base_url}/{org_id}/directories/{dir_id}/users"
             usr_resp = requests.get(usr_url, headers=headers).json()
             users = usr_resp.get("data", [])
+            user_map = {extract_guid(u.get("accountId")): u for u in users}
             time.sleep(delay)
 
             for g in groups:
@@ -101,19 +105,25 @@ if st.button("🚀 Start Crawl"):
                 time.sleep(delay)
                 role_names = [r.get("roleKey", "unknown-role") for r in roles if r]
 
-                for u in users:
+                grp_users_url = f"{base_url}/{org_id}/directories/{dir_id}/groups/{grp_id}/users"
+                group_users = requests.get(grp_users_url, headers=headers).json().get("data", [])
+                time.sleep(delay)
+
+                for u in group_users:
                     user_id = extract_guid(u.get("accountId"))
                     if not user_id:
                         continue
 
-                    user_email = u.get("email") or user_id
+                    u_full = user_map.get(user_id, u)
+
+                    user_email = u_full.get("email") or user_id
                     user_name = (
                         user_email or
-                        u.get("name") or
-                        u.get("nickname") or
+                        u_full.get("name") or
+                        u_full.get("nickname") or
                         user_id
                     )
-                    platform_roles = ", ".join(u.get("platformRoles", []))
+                    platform_roles = ", ".join(u_full.get("platformRoles", []))
 
                     entry = {
                         "directoryId": dir_id,
@@ -141,7 +151,7 @@ if st.button("🚀 Start Crawl"):
                         })
                     
                     # Platform (org-level) roles
-                    for p_role in u.get("platformRoles", []):
+                    for p_role in u_full.get("platformRoles", []):
                         roles_mapping.append({
                             "userId": user_id,
                             "userName": user_name,

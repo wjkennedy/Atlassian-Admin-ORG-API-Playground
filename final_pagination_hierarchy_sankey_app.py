@@ -32,25 +32,41 @@ else:
 delay = st.number_input("⏳ Delay between requests (seconds)", min_value=0.5, max_value=5.0, value=1.0, step=0.5)
 debug = st.checkbox("🐞 Show Debug Output", value=True)
 
+
 def paginate(url, headers, debug):
     results = []
     while url:
-        resp = requests.get(url, headers=headers).json()
-        data = resp.get("data", [])
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            if debug:
+                st.error(f"Request failed: {resp.status_code} {resp.text}")
+            break
+        resp_json = resp.json()
+        data = resp_json.get("data", [])
         results.extend(data)
         if debug:
-            st.write(f"➡️ Pagination URL: {url}")
-            st.json(resp)
-        next_link = resp.get("links", {}).get("next")
+            st.write(f"➡️ Pagination URL: {resp.url}")
+            st.json(resp_json)
+        next_link = resp_json.get("links", {}).get("next")
         if next_link:
-            url = f"{url.split('?')[0]}?cursor={next_link}"
+            if next_link.startswith("http"):
+                url = next_link
+            else:
+                base = url.split("?")[0]
+                if next_link.startswith("?"):
+                    url = base + next_link
+                else:
+                    url = f"{base}?cursor={next_link}"
             time.sleep(delay)
         else:
             url = None
     return results
 
 if st.button("🚀 Start Crawl"):
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json"
+    }
     base_url = "https://api.atlassian.com/admin/v2/orgs"
 
     hierarchy_data = []
@@ -81,9 +97,10 @@ if st.button("🚀 Start Crawl"):
             grp_url = f"{base_url}/{org_id}/directories/{dir_id}/groups"
             groups = paginate(grp_url, headers, debug)
 
-            # Fetch users with pagination
+            # Fetch users with pagination (directory-wide)
             usr_url = f"{base_url}/{org_id}/directories/{dir_id}/users"
             users = paginate(usr_url, headers, debug)
+            user_map = {extract_guid(u.get("accountId")): u for u in users}
 
             for g in groups:
                 grp_id = extract_guid(g.get("id"))
@@ -99,19 +116,26 @@ if st.button("🚀 Start Crawl"):
                 roles = paginate(role_url, headers, debug)
                 role_names = [r.get("roleKey", "unknown-role") for r in roles if r]
 
-                for u in users:
+                # Fetch members of the group to avoid creating a cross-product
+                grp_users_url = f"{base_url}/{org_id}/directories/{dir_id}/groups/{grp_id}/users"
+                group_users = paginate(grp_users_url, headers, debug)
+
+                for u in group_users:
                     user_id = extract_guid(u.get("accountId"))
                     if not user_id:
                         continue
 
-                    user_email = u.get("email") or user_id
+                    # Lookup full user details from the directory-level list
+                    u_full = user_map.get(user_id, u)
+
+                    user_email = u_full.get("email") or user_id
                     user_name = (
                         user_email or
-                        u.get("name") or
-                        u.get("nickname") or
+                        u_full.get("name") or
+                        u_full.get("nickname") or
                         user_id
                     )
-                    platform_roles = ", ".join(u.get("platformRoles", []))
+                    platform_roles = ", ".join(u_full.get("platformRoles", []))
 
                     entry = {
                         "directoryId": dir_id,
@@ -137,7 +161,7 @@ if st.button("🚀 Start Crawl"):
                             "roleKey": r
                         })
 
-                    for p_role in u.get("platformRoles", []):
+                    for p_role in u_full.get("platformRoles", []):
                         roles_mapping.append({
                             "userId": user_id,
                             "userName": user_name,
