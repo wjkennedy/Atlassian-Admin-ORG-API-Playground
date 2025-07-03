@@ -36,12 +36,18 @@ org_id = "YOUR_ORGANIZATION_ID"
 
 2️⃣ **Or provide these interactively** in the app’s sidebar if the secrets file isn’t present.
 
+3️⃣ Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
 ---
 
 ## 🚀 **Run the App**
 
 ```bash
-streamlit run final_hierarchy_sankey_app.py
+streamlit run final_pagination_hierarchy_sankey_app.py
 ```
 
 ---

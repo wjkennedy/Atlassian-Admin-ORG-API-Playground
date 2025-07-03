@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import json
 import pandas as pd
+import time
 
 # --- Logo ---
 st.image("https://a9group.net/a9logo.png", width=96)
@@ -17,9 +18,45 @@ st.info("""
 4️⃣ The app remembers your responses for dynamic dropdowns (like `directoryId`, `userId`, etc.).  
 """)
 
+def paginate(url, headers, params, debug):
+    all_results = []
+    while url:
+        resp = requests.get(url, headers=headers, params=params)
+        if resp.status_code != 200:
+            if debug:
+                st.error(f"Request failed: {resp.status_code} {resp.text}")
+            break
+        resp_json = resp.json()
+        data = resp_json.get("data", [])
+        if isinstance(data, list):
+            all_results.extend(data)
+        if debug:
+            st.write(f"➡️ Pagination URL: {resp.url}")
+            st.json(resp_json)
+        next_link = resp_json.get("links", {}).get("next")
+        if next_link:
+            if next_link.startswith("http"):
+                url = next_link
+                params = None
+            else:
+                base = url.split("?")[0]
+                if next_link.startswith("?"):
+                    url = base + next_link
+                else:
+                    url = f"{base}?cursor={next_link}"
+            time.sleep(delay)
+        else:
+            url = None
+    return {"data": all_results}
+
 st.sidebar.header("🔧 API Setup")
 api_key = st.sidebar.text_input("API Key (Bearer Token)", type="password")
 org_id = st.sidebar.text_input("Organization ID")
+paginate_results = st.sidebar.checkbox("📃 Paginate results", value=True)
+delay = st.sidebar.number_input(
+    "⏳ Delay between requests (seconds)", min_value=0.0, max_value=5.0, value=0.5, step=0.5
+)
+debug = st.sidebar.checkbox("🐞 Show Debug Output", value=False)
 
 @st.cache_data
 def load_openapi_spec():
@@ -66,12 +103,23 @@ if "parameters" in selected["details"]:
         ptype = param.get("in", "")
         # Use known dict if available
         known_dict = st.session_state.get(f"{pname}_dict", {})
+        param_key = f"param_{pname}"
         if ptype == "path":
             if known_dict:
-                value = st.selectbox(f"🔧 Path param: {pname} ({pdesc})", list(known_dict.keys()), format_func=lambda k: known_dict[k])
+                value = st.selectbox(
+                    f"🔧 Path param: {pname} ({pdesc})",
+                    list(known_dict.keys()),
+                    format_func=lambda k: known_dict[k],
+                    key=param_key,
+                )
             else:
-                value = st.text_input(f"🔧 Path param: {pname} ({pdesc})", "")
+                value = st.text_input(
+                    f"🔧 Path param: {pname} ({pdesc})",
+                    st.session_state.get(param_key, ""),
+                    key=param_key,
+                )
             path_params[pname] = value
+            st.session_state[param_key] = value
         elif ptype == "query":
             value = st.text_input(f"🔎 Query param: {pname} ({pdesc})", "")
             if value:
@@ -104,9 +152,13 @@ def send_request(method, url, api_key, body=None, params=None):
     }
     if method == "GET":
         resp = requests.get(url, headers=headers, params=params)
+        data = resp.json()
+        if paginate_results and resp.status_code == 200:
+            data = paginate(url, headers, params, debug)
+        return resp, data
     else:
         resp = requests.request(method, url, headers=headers, json=body, params=params)
-    return resp
+        return resp, resp.json() if resp.headers.get("Content-Type", "").startswith("application/json") else None
 
 if st.button("🚀 Send Request"):
     method = selected["method"]
@@ -115,11 +167,10 @@ if st.button("🚀 Send Request"):
     
     st.write(f"🔗 **Final URL:** {editable_url}")
     
-    resp = send_request(method, editable_url, api_key, body=request_body, params=query_params)
+    resp, json_data = send_request(method, editable_url, api_key, body=request_body, params=query_params)
     st.write(f"Status Code: {resp.status_code}")
-    
+
     try:
-        json_data = resp.json()
         st.subheader("📦 JSON Response")
         st.json(json_data)
         
@@ -130,6 +181,9 @@ if st.button("🚀 Send Request"):
                 mapping = {str(item[key]): item.get("name", item.get("displayName", item[key])) for item in json_data["data"] if key in item}
                 if mapping:
                     st.session_state[f"{key}_dict"] = mapping
+                    param_key = f"param_{key}"
+                    if key == "directoryId" and param_key not in st.session_state:
+                        st.session_state[param_key] = list(mapping.keys())[0]
 
         # --- Try to build tabular data ---
         df = None
