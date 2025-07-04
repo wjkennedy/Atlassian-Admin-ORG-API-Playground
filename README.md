@@ -47,7 +47,7 @@ pip install -r requirements.txt
 ## 🚀 **Run the App**
 
 ```bash
-streamlit run final_pagination_hierarchy_sankey_app.py
+streamlit run app.py
 ```
 
 ---
