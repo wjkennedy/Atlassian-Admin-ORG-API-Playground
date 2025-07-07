@@ -53,6 +53,36 @@ else:
 delay = st.number_input("⏳ Delay between requests (seconds)", min_value=0.5, max_value=5.0, value=1.0, step=0.5)
 debug = st.checkbox("🐞 Show Debug Output", value=False)
 
+
+def paginate(url, headers, debug):
+    results = []
+    while url:
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            if debug:
+                st.error(f"Request failed: {resp.status_code} {resp.text}")
+            break
+        resp_json = resp.json()
+        data = resp_json.get("data", [])
+        results.extend(data)
+        if debug:
+            st.write(f"➡️ Pagination URL: {resp.url}")
+            st.json(resp_json)
+        next_link = resp_json.get("links", {}).get("next")
+        if next_link:
+            if next_link.startswith("http"):
+                url = next_link
+            else:
+                base = url.split("?")[0]
+                if next_link.startswith("?"):
+                    url = base + next_link
+                else:
+                    url = f"{base}?cursor={next_link}"
+            time.sleep(delay)
+        else:
+            url = None
+    return results
+
 if st.button("🚀 Start Crawl"):
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -70,8 +100,7 @@ if st.button("🚀 Start Crawl"):
 
 
     dir_url = f"{base_url}/{org_id}/directories"
-    dirs_resp = requests.get(dir_url, headers=headers).json()
-    directories = dirs_resp.get("data", [])
+    directories = paginate(dir_url, headers, debug)
 
     if not directories:
         st.warning("No directories found or unable to fetch directories.")
@@ -83,15 +112,11 @@ if st.button("🚀 Start Crawl"):
                 continue
 
             grp_url = f"{base_url}/{org_id}/directories/{dir_id}/groups"
-            grp_resp = requests.get(grp_url, headers=headers).json()
-            groups = grp_resp.get("data", [])
-            time.sleep(delay)
+            groups = paginate(grp_url, headers, debug)
 
             usr_url = f"{base_url}/{org_id}/directories/{dir_id}/users"
-            usr_resp = requests.get(usr_url, headers=headers).json()
-            users = usr_resp.get("data", [])
+            users = paginate(usr_url, headers, debug)
             user_map = {extract_guid(u.get("accountId")): u for u in users}
-            time.sleep(delay)
 
             for g in groups:
                 grp_id = extract_guid(g.get("id"))
@@ -100,14 +125,11 @@ if st.button("🚀 Start Crawl"):
                     continue
 
                 role_url = f"{base_url}/{org_id}/directories/{dir_id}/groups/{grp_id}/role-assignments"
-                role_resp = requests.get(role_url, headers=headers).json()
-                roles = role_resp.get("data", [])
-                time.sleep(delay)
+                roles = paginate(role_url, headers, debug)
                 role_names = [r.get("roleKey", "unknown-role") for r in roles if r]
 
                 grp_users_url = f"{base_url}/{org_id}/directories/{dir_id}/groups/{grp_id}/users"
-                group_users = requests.get(grp_users_url, headers=headers).json().get("data", [])
-                time.sleep(delay)
+                group_users = paginate(grp_users_url, headers, debug)
 
                 for u in group_users:
                     user_id = extract_guid(u.get("accountId"))
