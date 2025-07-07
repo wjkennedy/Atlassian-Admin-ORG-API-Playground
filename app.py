@@ -8,7 +8,7 @@ import time
 st.image("https://a9group.net/a9logo.png", width=96)
 
 # --- App Title and Instructions ---
-st.title("🚀 Atlassian Admin API Playground (Full Dynamic Spec + CSV Export)")
+st.title("🚀 Atlassian Admin & Jira API Playground")
 
 st.info("""
 🔑 **Instructions**  
@@ -98,29 +98,38 @@ if grp_dict:
     st.dataframe(pd.DataFrame(list(grp_dict.items()), columns=["ID", "Name"]))
 
 @st.cache_data
-def load_openapi_spec():
-    url = "https://dac-static.atlassian.com/cloud/admin/organization/swagger.v3.json"
-    resp = requests.get(url)
-    return resp.json() if resp.status_code == 200 else {}
+def load_openapi_specs():
+    urls = [
+        "https://dac-static.atlassian.com/cloud/admin/organization/swagger.v3.json",
+        "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
+    ]
+    specs = []
+    for url in urls:
+        try:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                specs.append(resp.json())
+        except Exception as e:
+            st.warning(f"Failed to load {url}: {e}")
+    return specs
 
-spec = load_openapi_spec()
+specs = load_openapi_specs()
 
-# --- Use servers[0].url from the spec to get the base URL
-servers = spec.get("servers", [])
-base_url = servers[0]["url"] if servers else "https://api.atlassian.com"
-
-paths = spec.get("paths", {})
 tags = {}
-for path, methods in paths.items():
-    for method, details in methods.items():
-        for tag in details.get("tags", []):
-            if tag not in tags:
-                tags[tag] = []
-            tags[tag].append({
-                "path": path,
-                "method": method.upper(),
-                "details": details
-            })
+for spec in specs:
+    server_url = spec.get("servers", [{}])[0].get("url", "https://api.atlassian.com")
+    paths = spec.get("paths", {})
+    for path, methods in paths.items():
+        for method, details in methods.items():
+            for tag in details.get("tags", []):
+                if tag not in tags:
+                    tags[tag] = []
+                tags[tag].append({
+                    "path": path,
+                    "method": method.upper(),
+                    "details": details,
+                    "server_url": server_url,
+                })
 
 tag = st.sidebar.selectbox("📂 Select API Tag", list(tags.keys()))
 endpoints = tags[tag]
@@ -176,7 +185,7 @@ if "requestBody" in selected["details"]:
         request_body = {}
 
 # --- Build default URL ---
-default_url = base_url + selected["path"]
+default_url = selected.get("server_url", "https://api.atlassian.com") + selected["path"]
 if "{orgId}" in default_url and org_id:
     default_url = default_url.replace("{orgId}", org_id)
 
