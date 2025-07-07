@@ -8,7 +8,7 @@ import time
 st.image("https://a9group.net/a9logo.png", width=96)
 
 # --- App Title and Instructions ---
-st.title("🚀 Atlassian Admin API Playground (Full Dynamic Spec + CSV Export)")
+st.title("🚀 Atlassian Admin & Jira API Playground")
 
 st.info("""
 🔑 **Instructions**  
@@ -58,30 +58,78 @@ delay = st.sidebar.number_input(
 )
 debug = st.sidebar.checkbox("🐞 Show Debug Output", value=False)
 
+# --- Auto-discover directories and groups for quick reference ---
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "Accept": "application/json",
+}
+
+if api_key and org_id and "directoryId_dict" not in st.session_state:
+    dir_url = f"https://api.atlassian.com/admin/v2/orgs/{org_id}/directories"
+    resp = requests.get(dir_url, headers=headers)
+    if resp.status_code == 200:
+        directories = resp.json().get("data", [])
+        mapping = {d.get("directoryId"): d.get("name", d.get("directoryId")) for d in directories}
+        if mapping:
+            st.session_state["directoryId_dict"] = mapping
+            st.session_state.setdefault("param_directoryId", list(mapping.keys())[0])
+
+selected_dir = st.session_state.get("param_directoryId")
+if api_key and org_id and selected_dir and "groupId_dict" not in st.session_state:
+    grp_url = f"https://api.atlassian.com/admin/v2/orgs/{org_id}/directories/{selected_dir}/groups"
+    resp = requests.get(grp_url, headers=headers)
+    if resp.status_code == 200:
+        groups = resp.json().get("data", [])
+        mapping = {g.get("id"): g.get("name", g.get("id")) for g in groups}
+        if mapping:
+            st.session_state["groupId_dict"] = mapping
+
+st.markdown("## 📑 Known Variables")
+st.write(f"**Organization ID:** {org_id}")
+
+dir_dict = st.session_state.get("directoryId_dict")
+if dir_dict:
+    st.write("**Directories**")
+    st.dataframe(pd.DataFrame(list(dir_dict.items()), columns=["ID", "Name"]))
+
+grp_dict = st.session_state.get("groupId_dict")
+if grp_dict:
+    st.write(f"**Groups for Directory {selected_dir}**")
+    st.dataframe(pd.DataFrame(list(grp_dict.items()), columns=["ID", "Name"]))
+
 @st.cache_data
-def load_openapi_spec():
-    url = "https://dac-static.atlassian.com/cloud/admin/organization/swagger.v3.json"
-    resp = requests.get(url)
-    return resp.json() if resp.status_code == 200 else {}
+def load_openapi_specs():
+    urls = [
+        "https://dac-static.atlassian.com/cloud/admin/organization/swagger.v3.json",
+        "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
+    ]
+    specs = []
+    for url in urls:
+        try:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                specs.append(resp.json())
+        except Exception as e:
+            st.warning(f"Failed to load {url}: {e}")
+    return specs
 
-spec = load_openapi_spec()
+specs = load_openapi_specs()
 
-# --- Use servers[0].url from the spec to get the base URL
-servers = spec.get("servers", [])
-base_url = servers[0]["url"] if servers else "https://api.atlassian.com"
-
-paths = spec.get("paths", {})
 tags = {}
-for path, methods in paths.items():
-    for method, details in methods.items():
-        for tag in details.get("tags", []):
-            if tag not in tags:
-                tags[tag] = []
-            tags[tag].append({
-                "path": path,
-                "method": method.upper(),
-                "details": details
-            })
+for spec in specs:
+    server_url = spec.get("servers", [{}])[0].get("url", "https://api.atlassian.com")
+    paths = spec.get("paths", {})
+    for path, methods in paths.items():
+        for method, details in methods.items():
+            for tag in details.get("tags", []):
+                if tag not in tags:
+                    tags[tag] = []
+                tags[tag].append({
+                    "path": path,
+                    "method": method.upper(),
+                    "details": details,
+                    "server_url": server_url,
+                })
 
 tag = st.sidebar.selectbox("📂 Select API Tag", list(tags.keys()))
 endpoints = tags[tag]
@@ -137,7 +185,7 @@ if "requestBody" in selected["details"]:
         request_body = {}
 
 # --- Build default URL ---
-default_url = base_url + selected["path"]
+default_url = selected.get("server_url", "https://api.atlassian.com") + selected["path"]
 if "{orgId}" in default_url and org_id:
     default_url = default_url.replace("{orgId}", org_id)
 

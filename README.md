@@ -1,6 +1,7 @@
 # A9 Hierarchy Crawler & Sankey View
 
 This tool helps Jira admins, compliance teams, and stakeholders **visualize, report, and audit** access within your Atlassian organization.
+It now also supports exploring the Jira Cloud REST API in the same interface.
 
 <img src="./localhost_8502_.png" alt="screenshot" style="height:800px;"/>
 ---
@@ -8,6 +9,7 @@ This tool helps Jira admins, compliance teams, and stakeholders **visualize, rep
 ## ✏️ **What It Does**
 
 ✅ **Crawls your Atlassian organization hierarchy**
+✅ Explores both **Admin** and **Jira Cloud** REST APIs
 ✅ Builds a complete map of:
 
 * Directories
@@ -47,7 +49,8 @@ pip install -r requirements.txt
 ## 🚀 **Run the App**
 
 ```bash
-streamlit run final_pagination_hierarchy_sankey_app.py
+streamlit run app.py
+
 ```
 
 ---
