@@ -8,14 +8,14 @@ import time
 st.image("https://a9group.net/a9logo.png", width=96)
 
 # --- App Title and Instructions ---
-st.title("🚀 Atlassian Admin & Jira API Playground")
+st.title("Atlassian Admin & Jira API Playground")
 
 st.info("""
-🔑 **Instructions**  
-1️⃣ Enter your **API Key** and **Organization ID**.  
-2️⃣ Browse all endpoints in the sidebar, edit the URL as needed, and test live!  
-3️⃣ View results as JSON or table, and download as CSV!  
-4️⃣ The app remembers your responses for dynamic dropdowns (like `directoryId`, `userId`, etc.).  
+ **Instructions**  
+•  Enter your **API Key** and **Organization ID**.  
+• Browse all endpoints in the sidebar, edit the URL as needed, and test live!  
+• View results as JSON or table, and download as CSV!  
+• The app remembers your responses for dynamic dropdowns (like `directoryId`, `userId`, etc.).  
 """)
 
 def paginate(url, headers, params, debug):
@@ -31,7 +31,7 @@ def paginate(url, headers, params, debug):
         if isinstance(data, list):
             all_results.extend(data)
         if debug:
-            st.write(f"➡️ Pagination URL: {resp.url}")
+            st.write(f"Pagination URL: {resp.url}")
             st.json(resp_json)
         next_link = resp_json.get("links", {}).get("next")
         if next_link:
@@ -49,14 +49,14 @@ def paginate(url, headers, params, debug):
             url = None
     return {"data": all_results}
 
-st.sidebar.header("🔧 API Setup")
+st.sidebar.header("API Setup")
 api_key = st.sidebar.text_input("API Key (Bearer Token)", type="password")
 org_id = st.sidebar.text_input("Organization ID")
-paginate_results = st.sidebar.checkbox("📃 Paginate results", value=True)
+paginate_results = st.sidebar.checkbox("Paginate results", value=True)
 delay = st.sidebar.number_input(
-    "⏳ Delay between requests (seconds)", min_value=0.0, max_value=5.0, value=0.5, step=0.5
+    "Delay between requests (seconds)", min_value=0.0, max_value=5.0, value=0.5, step=0.5
 )
-debug = st.sidebar.checkbox("🐞 Show Debug Output", value=False)
+debug = st.sidebar.checkbox("Show Debug Output", value=False)
 
 # --- Auto-discover directories and groups for quick reference ---
 headers = {
@@ -84,7 +84,7 @@ if api_key and org_id and selected_dir and "groupId_dict" not in st.session_stat
         if mapping:
             st.session_state["groupId_dict"] = mapping
 
-st.markdown("## 📑 Known Variables")
+st.markdown("##Known Variables")
 st.write(f"**Organization ID:** {org_id}")
 
 dir_dict = st.session_state.get("directoryId_dict")
@@ -131,13 +131,13 @@ for spec in specs:
                     "server_url": server_url,
                 })
 
-tag = st.sidebar.selectbox("📂 Select API Tag", list(tags.keys()))
+tag = st.sidebar.selectbox("Select API Tag", list(tags.keys()))
 endpoints = tags[tag]
 endpoint_options = [f"{ep['method']} {ep['path']}" for ep in endpoints]
-selected_endpoint = st.sidebar.selectbox("🔗 Select Endpoint", endpoint_options)
+selected_endpoint = st.sidebar.selectbox("Select Endpoint", endpoint_options)
 selected = next(ep for ep in endpoints if f"{ep['method']} {ep['path']}" == selected_endpoint)
 
-st.subheader(f"🔗 {selected_endpoint}")
+st.subheader(f"{selected_endpoint}")
 st.write(selected["details"].get("summary", "No summary available."))
 
 # --- Path & query parameters ---
@@ -155,33 +155,33 @@ if "parameters" in selected["details"]:
         if ptype == "path":
             if known_dict:
                 value = st.selectbox(
-                    f"🔧 Path param: {pname} ({pdesc})",
+                    f"Path param: {pname} ({pdesc})",
                     list(known_dict.keys()),
                     format_func=lambda k: known_dict[k],
                     key=param_key,
                 )
             else:
                 value = st.text_input(
-                    f"🔧 Path param: {pname} ({pdesc})",
+                    f"Path param: {pname} ({pdesc})",
                     st.session_state.get(param_key, ""),
                     key=param_key,
                 )
             path_params[pname] = value
             st.session_state[param_key] = value
         elif ptype == "query":
-            value = st.text_input(f"🔎 Query param: {pname} ({pdesc})", "")
+            value = st.text_input(f"Query param: {pname} ({pdesc})", "")
             if value:
                 query_params[pname] = value
 
 # --- Request body if applicable ---
 request_body = None
 if "requestBody" in selected["details"]:
-    st.subheader("📝 Request Body (JSON)")
+    st.subheader("Request Body (JSON)")
     body_input = st.text_area("Edit the request body here:", "{}")
     try:
         request_body = json.loads(body_input)
     except json.JSONDecodeError:
-        st.warning("⚠️ Invalid JSON. Using empty object.")
+        st.warning("Invalid JSON. Using empty object.")
         request_body = {}
 
 # --- Build default URL ---
@@ -189,7 +189,7 @@ default_url = selected.get("server_url", "https://api.atlassian.com") + selected
 if "{orgId}" in default_url and org_id:
     default_url = default_url.replace("{orgId}", org_id)
 
-st.subheader("🔗 Dynamic URL Editor (Honoring Spec Base URL)")
+st.subheader("Dynamic URL Editor")
 editable_url = st.text_input("Edit the final request URL", value=default_url)
 
 # --- Send request helper ---
@@ -208,18 +208,18 @@ def send_request(method, url, api_key, body=None, params=None):
         resp = requests.request(method, url, headers=headers, json=body, params=params)
         return resp, resp.json() if resp.headers.get("Content-Type", "").startswith("application/json") else None
 
-if st.button("🚀 Send Request"):
+if st.button("Send Request"):
     method = selected["method"]
     for param, value in path_params.items():
         editable_url = editable_url.replace(f"{{{param}}}", value)
     
-    st.write(f"🔗 **Final URL:** {editable_url}")
+    st.write(f"**Final URL:** {editable_url}")
     
     resp, json_data = send_request(method, editable_url, api_key, body=request_body, params=query_params)
     st.write(f"Status Code: {resp.status_code}")
 
     try:
-        st.subheader("📦 JSON Response")
+        st.subheader("JSON Response")
         st.json(json_data)
         
         # --- Build known dictionaries for path parameters ---
@@ -241,23 +241,23 @@ if st.button("🚀 Send Request"):
             df = pd.DataFrame(json_data["data"])
         
         if df is not None and not df.empty:
-            st.subheader("📊 Tabular View")
+            st.subheader("Tabular View")
             st.dataframe(df)
 
             # --- Download CSV ---
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="⬇️ Download data as CSV",
+                label="Download data as CSV",
                 data=csv,
                 file_name='api_data.csv',
                 mime='text/csv',
             )
         else:
-            st.info("ℹ️ No tabular data to display.")
+            st.info("No tabular data to display.")
     except Exception as e:
         st.text(resp.text)
         st.error(f"Error parsing JSON: {e}")
 
 st.markdown("---")
-st.caption("✅ Final release: fully dynamic, builds dictionaries for known path params, and CSV export ready!")
+st.caption("Final release: fully dynamic, builds dictionaries for known path params, and CSV export ready!")
 
